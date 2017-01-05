@@ -1,0 +1,5 @@
+basisOfRecord:
+ allowed: [HumanObservation, PreservedSpecimen, Occurrence]
+
+eventDate:
+ dateformat: ['%Y-%m-%d', '%Y-%m', '%Y'] # The ISO8601 format, but no ranges
