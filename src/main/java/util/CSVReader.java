@@ -36,9 +36,9 @@ public class CSVReader implements Reader {
             iterator = csvParser.iterator();
         } catch (FileNotFoundException e) {
             // TODO: Handle exceptions
-            e.printStackTrace();
+            throw new RuntimeException(e);
         } catch (IOException e) {
-            e.printStackTrace();
+            throw new RuntimeException(e);
         }
     }
 

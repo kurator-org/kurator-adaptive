@@ -4,6 +4,7 @@ import akka.actor.AbstractLoggingFSM;
 import static akka.dispatch.Futures.future;
 import static akka.pattern.Patterns.pipe;
 
+import akka.actor.FSM;
 import validation.PythonTestRunner;
 import validation.TestResult;
 import messages.*;
@@ -30,7 +31,7 @@ public class FSMActor extends AbstractLoggingFSM<FSMActor.State, FSMActor.Data> 
 
                     testRunner.init();
                     log().info("Jython interpreter initialized");
-                    return goTo(State.IDLE).replying(new Initialized());
+                    return goTo(State.IDLE);
                 })
         );
 
@@ -48,13 +49,25 @@ public class FSMActor extends AbstractLoggingFSM<FSMActor.State, FSMActor.Data> 
 
         when(State.IDLE, matchEvent(EndOfStream.class, Data.class, (end, data) -> {
             testRunner.close();
-            return stop();
+            context().stop(self());
+            return goTo(State.ENDED);
         }));
 
         when(State.BUSY, matchEvent(ActorResult.class, Data.class, (result, data) -> {
-                    //System.out.println(result.obj);
+                    sender().forward(result, context());
                     return goTo(State.IDLE).replying(new RequestData());
                 })
+        );
+
+        when(State.ENDED, matchAnyEvent((msg, data) -> {
+                    log().error("message received during actor termination!");
+                    return stay();
+                })
+        );
+
+        onTermination(matchStop(Shutdown(), (state, data) -> {
+                log().info("Finished all tasks, shutting down");
+            })
         );
     }
 
