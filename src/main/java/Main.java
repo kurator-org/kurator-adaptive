@@ -1,15 +1,11 @@
-import actors.Supervisor;
+import actors.examples.DataValidator;
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 import akka.actor.Props;
 import org.apache.commons.cli.*;
-import util.TextWriter;
-import util.Writer;
-import validation.PythonTestRunnerFactory;
-import validation.TestRunnerFactory;
-import messages.Start;
-import util.CSVReader;
-import util.Reader;
+import python.PythonConfig;
+
+import java.io.*;
 
 /**
  * Created by lowery on 1/4/17.
@@ -46,12 +42,6 @@ public class Main {
                 .isRequired(true)
                 .create("out"));
 
-        options.addOption(OptionBuilder.withArgName("maxConcurrency")
-                .hasArg()
-                .withArgName("file")
-                .withDescription("max number of concurrent tests (defaults to 5)")
-                .create("maxConcurrency"));
-
         CommandLineParser parser = new DefaultParser();
         try {
             CommandLine cmd = parser.parse(options, args);
@@ -61,28 +51,69 @@ public class Main {
             String input = cmd.getOptionValue("in");
             String output = cmd.getOptionValue("out");
 
-            int maxConcurrency = 5;
-
-            if (cmd.hasOption("maxConcurrency")) {
-                maxConcurrency = Integer.parseInt(cmd.getOptionValue("maxConcurrency"));
-            }
-
-            executeTests(script, config, maxConcurrency, input, output);
+            executeTests(script, config, input, output);
         } catch (ParseException e) {
             HelpFormatter formatter = new HelpFormatter();
-            formatter.printHelp("adaptive", options, true);
+            formatter.printHelp("java -jar adaptive.jar", options, true);
         }
 
     }
 
-    private static void executeTests(String script, String config, int maxConcurrency, String input, String output) {
-        TestRunnerFactory factory = new PythonTestRunnerFactory(script, config);
-        Reader reader = new CSVReader(input);
-        Writer writer = new TextWriter(output);
+    private static void executeTests(String script, String config, String input, String output) {
+        if (!(new File(script).exists())) {
+            System.err.println("Error: python script, " + script + " not found");
+            System.exit(-1);
+        }
 
-        ActorSystem system = ActorSystem.create();
+        PythonConfig pythonConfig = new PythonConfig();
+        pythonConfig.setScript(script);
 
-        ActorRef workflow = system.actorOf(Props.create(Supervisor.class, reader, writer, factory, maxConcurrency), "supervisor");
-        workflow.tell(new Start(), ActorRef.noSender());
+        if (System.getProperty("python.home") == null) {
+            System.err.println("Error: missing python.home system property. Set it to point to the location of ");
+            System.err.println("your jython installation directory by supplying -Dpython.home=/path/to/jython");
+            System.exit(-1);
+        }
+
+//        TODO: this does not work
+//        try {
+//            //OutputStream errStream = new FileOutputStream("error.log");
+//            //OutputStream outStream = new FileOutputStream("output.log");
+//
+//            //pythonConfig.setErrStream(errStream);
+//            //pythonConfig.setOutStream(outStream);
+//
+//            pythonConfig.setErrStream(System.err);
+//            pythonConfig.setOutStream(System.out);
+//        } catch (IOException e) {
+//            System.err.println("Error: could not create log files in current dir");
+//            System.err.println(e.getMessage());
+//            System.exit(-1);
+//        }
+
+        pythonConfig.setErrStream(System.err);
+        pythonConfig.setOutStream(System.out);
+
+        File inFile = new File(input);
+        File outFile = new File(output);
+        File yamlFile = new File(config);
+
+        if (!inFile.exists()) {
+            System.err.println("Error: input file, " + input + " not found");
+            System.exit(-1);
+        }
+
+        if (!inFile.exists()) {
+            System.err.println("Error: yaml file, " + yamlFile + " not found");
+            System.exit(-1);
+
+        }
+
+        // start actor system
+        ActorSystem system = ActorSystem.create("adaptive-demo");
+
+        ActorRef actor = system.actorOf(DataValidator.props(inFile, outFile), "data-validator");
+        actor.tell(new DataValidator.Configure(pythonConfig, yamlFile), ActorRef.noSender());
+
+        system.awaitTermination();
     }
 }

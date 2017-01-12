@@ -1,10 +1,10 @@
 package util;
 
-import messages.EndOfStream;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
@@ -15,16 +15,16 @@ import java.util.Map;
 /**
  * Created by lowery on 1/5/17.
  */
-public class CSVReader implements Reader {
+public class CSVReader {
     private static final CSVFormat csvFormat = CSVFormat.TDF.withQuote(null).withHeader();
 
     private String[] headers;
     private Iterator<CSVRecord> iterator;
 
-    public CSVReader(String filename) {
+    public CSVReader(File file) {
         // set up reader
         try {
-            CSVParser csvParser = new CSVParser(new FileReader(filename), csvFormat);
+            CSVParser csvParser = new CSVParser(new FileReader(file), csvFormat);
 
             Map<String, Integer> csvHeader = csvParser.getHeaderMap();
             headers = new String[csvHeader.size()];
