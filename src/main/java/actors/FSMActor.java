@@ -4,65 +4,63 @@ import akka.actor.AbstractLoggingFSM;
 import static akka.dispatch.Futures.future;
 import static akka.pattern.Patterns.pipe;
 
-import akka.actor.FSM;
-import validation.PythonTestRunner;
-import validation.TestResult;
-import messages.*;
+import akka.actor.Props;
+import akka.japi.Creator;
+import api.Worker;
+import scala.concurrent.ExecutionContext;
 
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.Callable;
+import messages.*;
+import scala.concurrent.Future;
 
 /**
  * Created by lowery on 1/4/17.
  */
 public class FSMActor extends AbstractLoggingFSM<FSMActor.State, FSMActor.Data> {
-    private PythonTestRunner testRunner;
+    private ExecutionContext ec = context().dispatcher();
+    private Worker worker;
 
-    public FSMActor(PythonTestRunner testRunner) {
-        this.testRunner = testRunner;
+    public FSMActor(Worker worker) {
+        this.worker = worker;
     }
 
     {
         startWith(State.CONSTRUCTED, new Data());
 
         when(State.CONSTRUCTED, matchEvent(Initialize.class, Data.class, (initialize, data) -> {
-                    log().info("Initializing jython interpreter");
+                worker.initialize();
 
-                    testRunner.init();
-                    log().info("Jython interpreter initialized");
-                    return goTo(State.IDLE);
-                })
+                return goTo(State.IDLE);
+            })
         );
 
-        when(State.IDLE, matchEvent(Map.class, Data.class, (message, data) -> {
-                    pipe(future(new Callable<ActorResult>() {
-                        @Override
-                        public ActorResult call() throws Exception {
-                            List<TestResult> result = testRunner.run(message);
-                            return new ActorResult(result);
-                        }
-                    }, context().dispatcher()), context().dispatcher()).to(self(), sender());
-                    return goTo(State.BUSY); //.replying(new RequestData());
-                })
+        when(State.IDLE, matchEvent(DoWork.class, Data.class, (message, data) -> {
+                Future<Worker.WorkComplete> future = future(worker.callable(message.obj), ec);
+                pipe(future, ec).to(self(), sender());
+
+                return goTo(State.BUSY);
+            })
         );
 
         when(State.IDLE, matchEvent(EndOfStream.class, Data.class, (end, data) -> {
-            testRunner.close();
-            context().stop(self());
-            return goTo(State.ENDED);
-        }));
+                worker.shutdown();
+                context().stop(self());
 
-        when(State.BUSY, matchEvent(ActorResult.class, Data.class, (result, data) -> {
-                    sender().forward(result, context());
-                    return goTo(State.IDLE).replying(new RequestData());
-                })
+                return goTo(State.ENDED);
+            })
+        );
+
+        when(State.BUSY, matchEvent(Worker.WorkComplete.class, Data.class, (message, data) -> {
+                ActorResult result = new ActorResult(message.obj);
+                sender().tell(result, self());
+
+                return goTo(State.IDLE).replying(new RequestWork());
+            })
         );
 
         when(State.ENDED, matchAnyEvent((msg, data) -> {
-                    log().error("message received during actor termination!");
-                    return stay();
-                })
+                log().error("Message received during actor termination!");
+                return stay();
+            })
         );
 
         onTermination(matchStop(Shutdown(), (state, data) -> {
@@ -71,10 +69,19 @@ public class FSMActor extends AbstractLoggingFSM<FSMActor.State, FSMActor.Data> 
         );
     }
 
+    public static Props props(final Worker worker) {
+        return Props.create(new Creator<FSMActor>() {
+            private static final long serialVersionUID = 1L;
+
+            public FSMActor create() throws Exception {
+                return new FSMActor(worker);
+            }
+        });
+    }
+
     // states
-    enum State {
+    public enum State {
         CONSTRUCTED,
-        INITIALIZING,
         IDLE,
         BUSY,
         ENDED
@@ -82,7 +89,29 @@ public class FSMActor extends AbstractLoggingFSM<FSMActor.State, FSMActor.Data> 
     }
 
     // state data
-    class Data {
+    public class Data {
 
     }
+
+    // messages
+    public static class RequestWork { }
+
+    public static class DoWork {
+        public final Object obj;
+
+        public DoWork(Object obj) {
+            this.obj = obj;
+        }
+    }
+
+    public class ActorResult {
+        public final Object obj;
+
+        public ActorResult(Object obj) {
+            this.obj = obj;
+        }
+    }
+
+    public static class EndOfStream { }
+
 }

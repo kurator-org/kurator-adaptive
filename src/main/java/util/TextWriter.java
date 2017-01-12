@@ -8,18 +8,17 @@ import java.util.Map;
 /**
  * Created by lowery on 1/10/2017.
  */
-public class TextWriter implements Writer {
+public class TextWriter {
     private FileWriter fileWriter;
 
-    public TextWriter(String outputFile){
+    public TextWriter(File outputFile){
         try {
-            this.fileWriter = new FileWriter(new File(outputFile));
+            this.fileWriter = new FileWriter(outputFile);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
-    @Override
     public void append(String line) {
         try {
             fileWriter.append(line);
@@ -28,7 +27,6 @@ public class TextWriter implements Writer {
         }
     }
 
-    @Override
     public void close() {
         try {
             fileWriter.close();

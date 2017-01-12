@@ -26,13 +26,4 @@ public class ValidationTest {
     public Object getParameter() {
         return parameter;
     }
-
-    @Override
-    public String toString() {
-        return "ValidationTest{" +
-                "name='" + name + '\'' +
-                ", term='" + term + '\'' +
-                ", parameter=" + parameter +
-                '}';
-    }
 }
